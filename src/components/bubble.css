@@ -1,0 +1,16 @@
+.custom-div {
+    width: 1000px;
+    margin-left: 2rem;
+    height: 600px;
+    aspect-ratio: 16 / 10;
+    position: relative;
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 0, 0, 0.6),
+      rgba(50, 50, 50, 0.6),
+      rgba(0, 255, 0, 0.6)
+    );
+    border-radius: 0.5rem; /* For rounded corners */
+    padding: 1.5rem; /* 24px padding */
+    color: white;
+  }
