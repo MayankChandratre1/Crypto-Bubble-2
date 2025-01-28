@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 
 export default function DexRisks() {
-  const [data, setData] = useState([]);
+  interface DexRisk {
+    Symbol: string;
+    Risk: string;
+  }
+
+  const [data, setData] = useState<DexRisk[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -17,7 +22,7 @@ export default function DexRisks() {
         const result = await response.json();
         setData(result);
       } catch (error) {
-        setError(error.message);
+        setError((error as any).message);
       } finally {
         setLoading(false);
       }

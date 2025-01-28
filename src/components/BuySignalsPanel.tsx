@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Crown,
   ChevronDown,
@@ -8,11 +8,15 @@ import {
   ExternalLink,
   ChevronUp,
   LucideAlertTriangle,
-  Lock, // Import the Lock icon
+  Lock, 
   User,
   Plus
 } from 'lucide-react';
 import { FaTelegram } from 'react-icons/fa';
+
+interface ApiSignal {
+  description: string;
+}
 
 interface SignalData {
   symbol: string;
@@ -34,35 +38,51 @@ const WALLET_OPTIONS = [
   'k9m1p6hs8jl3...Pqr'
 ];
 
-const signals: SignalData[] = [
-  {
-    symbol: 'SOL',
-    price: 243.80,
-    risk: 44,
-    marketCap: '3/4',
-    timeAgo: '15m',
-    good: ['4 cycles are at the bottom'],
-    bad: ['3-Day Cycle is falling, can indicate further downside']
-  },
-  {
-    symbol: 'DOT',
-    price: 8.12,
-    risk: 38,
-    marketCap: '1/4',
-    timeAgo: '1h',
-    good: ['RSI oversold on 4h timeframe'],
-    bad: ['Volume declining']
-  },
-  {
-    symbol: 'TON',
-    price: 2.43,
-    risk: 52,
-    marketCap: '4/4',
-    timeAgo: '16h',
-    good: ['Strong support level reached'],
-    bad: ['High selling pressure']
+const parseApiData = (apiSignal: ApiSignal): SignalData | null => {
+  try {
+    const desc = apiSignal.description;
+    const symbolMatch = desc.match(/\$([A-Z]+)USDT/);
+    const priceMatch = desc.match(/\$\s*(\d+\.?\d*)/);
+    
+    if (!symbolMatch || !priceMatch) return null;
+
+    const symbol = symbolMatch[1];
+    const price = parseFloat(priceMatch[1]);
+    
+    // Extract performance metrics if they exist
+    const performanceMatch = desc.match(/\(3M, 1M, 2W\): ([^)]+)/);
+    const good: string[] = [];
+    const bad: string[] = [];
+
+    if (desc.includes('⚠️')) {
+      bad.push(desc.split('⚠️')[1].split('\n')[0].trim());
+    }
+
+    if (performanceMatch) {
+      const metrics = performanceMatch[1].split('|').map(m => m.trim());
+      metrics.forEach(metric => {
+        if (metric.includes('✅')) {
+          good.push(metric);
+        } else {
+          bad.push(metric);
+        }
+      });
+    }
+
+    return {
+      symbol,
+      price,
+      risk: Math.floor(Math.random() * 60) + 20, 
+      marketCap: `${Math.floor(Math.random() * 4) + 1}/4`, 
+      timeAgo: '1m', 
+      good,
+      bad
+    };
+  } catch (error) {
+    console.error('Error parsing signal:', error);
+    return null;
   }
-];
+};
 
 const WalletDropdown: React.FC<{
   selectedWallet: string;
@@ -175,6 +195,8 @@ export const BuySignalsPanel: React.FC = () => {
   const [selectedWallet, setSelectedWallet] = useState(WALLET_OPTIONS[0]);
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
+  const [signals, setSignals] = useState<SignalData[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const handleWalletSelect = (wallet: string) => {
     setSelectedWallet(wallet);
@@ -193,9 +215,30 @@ export const BuySignalsPanel: React.FC = () => {
     setIsPremium(false); 
   };
 
+  useEffect(() => {
+    const fetchSignals = async () => {
+      try {
+        const response = await fetch('http://3.75.231.25/dex_signals');
+        const data: ApiSignal[] = await response.json();
+        const parsedSignals = data
+          .map(signal => parseApiData(signal))
+          .filter((signal): signal is SignalData => signal !== null);
+        setSignals(parsedSignals);
+      } catch (error) {
+        console.error('Error fetching signals:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSignals();
+    const interval = setInterval(fetchSignals, 60000); // Refresh every minute
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="w-full lg:w-80 bg-black border-l border-gray-800/80 flex flex-col h-screen">
-      {/* Header */}
+      
       <div className='flex items-center'>
         <div className="flex items-center justify-between gap-4 mb-6 border-l border-gray-800/80 pt-6 bg-[#19202F] px-6 py-[18px]">
           {isPremium ? (
@@ -240,11 +283,17 @@ export const BuySignalsPanel: React.FC = () => {
       </div>
       <h1 className="text-2xl text-center font-bold text-white">Latest Buy Signals</h1>
 
-      {/* Signals List */}
+     
       <div className="flex-1 overflow-y-auto px-4">
-        {signals.map((signal) => (
-          <SignalItem key={signal.symbol} signal={signal} isLocked={!isPremium} />
-        ))}
+        {loading ? (
+          <div className="text-white text-center mt-8">Loading signals...</div>
+        ) : signals.length > 0 ? (
+          signals.map((signal) => (
+            <SignalItem key={signal.symbol} signal={signal} isLocked={!isPremium} />
+          ))
+        ) : (
+          <div className="text-white text-center mt-8">No signals available</div>
+        )}
       </div>
 
       {!isPremium && (
@@ -259,7 +308,7 @@ export const BuySignalsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Premium Support Button for Premium Users */}
+ 
       {isPremium && (
         <div className="p-6 border-t border-gray-800/50">
           <button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 rounded-lg flex items-center justify-center gap-2 transition-all transform hover:scale-105"
