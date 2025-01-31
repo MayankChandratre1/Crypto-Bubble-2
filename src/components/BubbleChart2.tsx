@@ -55,7 +55,7 @@ interface Position {
 
 const BUBBLE_SIZE = 48; // 3rem
 const MIN_DISTANCE = BUBBLE_SIZE + 10; // Size plus margin
-const CONTAINER_WIDTH = 1400; // Increased width
+const CONTAINER_WIDTH = 1600; // Increased width
 const CONTAINER_HEIGHT = 1200;
 
 function calculateDistance(p1: Position, p2: Position): number {
@@ -129,48 +129,50 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
   }, [data, selectedRange]);
 
   const bubblePositions = useMemo(() => {
-    const containerWidth = CONTAINER_WIDTH - 48; // Accounting for padding and bubble size
-    const containerHeight = CONTAINER_HEIGHT - 48;
-    const positions: Position[] = [];
-
-    filteredData.forEach((item) => {
-      const riskBasedY = containerHeight - (item.Risk / 100 * containerHeight);
-      let position: Position | null = null;
-      let attempts = 0;
-      const maxAttempts = 100;
-
-      // Try to find a valid position
-      while (!position && attempts < maxAttempts) {
-        // Create a wider horizontal spread based on attempt number
-        const spread = Math.min(0.6 * containerWidth, attempts * 15); // Increased spread
-        const randomX = containerWidth / 2 + (Math.random() - 0.5) * spread;
-        
-        // Add some vertical jitter while staying close to the risk-based Y
-        const jitter = Math.min(30, attempts * 2);
-        const randomY = riskBasedY + (Math.random() - 0.5) * jitter;
-
-        const testPosition = { x: randomX, y: randomY };
-        
-        if (isValidPosition(testPosition, positions, containerWidth, containerHeight)) {
-          position = testPosition;
-        }
-
-        attempts++;
-      }
-
-      // If we couldn't find a valid position, use the last attempted position
-      if (!position) {
-        position = {
-          x: Math.max(BUBBLE_SIZE, Math.min(containerWidth - BUBBLE_SIZE, containerWidth / 2)),
-          y: Math.max(BUBBLE_SIZE, Math.min(containerHeight - BUBBLE_SIZE, riskBasedY))
-        };
-      }
-
-      positions.push(position);
+    const containerWidth = CONTAINER_WIDTH - BUBBLE_SIZE;
+    const containerHeight = CONTAINER_HEIGHT - BUBBLE_SIZE;
+  
+    const positions: Position[] = filteredData.map((item, index) => {
+      return {
+        x: Math.min(containerWidth - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, (item.Risk / 100) * containerWidth + (index % 3) * 30 - 30)), // Spread X with slight variation
+        y: containerHeight - (item.Risk / 100) * containerHeight, // Spread Y based on risk
+      };
     });
-
+  
+    // Function to adjust overlapping bubbles
+    function adjustPositions(positions: Position[]): boolean {
+      let moved = false;
+      for (let i = 0; i < positions.length; i++) {
+        for (let j = i + 1; j < positions.length; j++) {
+          const p1 = positions[i];
+          const p2 = positions[j];
+          const distance = calculateDistance(p1, p2);
+          
+          if (distance < MIN_DISTANCE) {
+            moved = true;
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+            const moveBy = (MIN_DISTANCE - distance) / 2;
+            
+            positions[i].x = Math.min(containerWidth - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[i].x - Math.cos(angle) * moveBy));
+            positions[i].y = Math.min(containerHeight - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[i].y - Math.sin(angle) * moveBy));
+            
+            positions[j].x = Math.min(containerWidth - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[j].x + Math.cos(angle) * moveBy));
+            positions[j].y = Math.min(containerHeight - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[j].y + Math.sin(angle) * moveBy));
+          }
+        }
+      }
+      return moved;
+    }
+  
+    // Apply position adjustment iteratively
+    let iterations = 0;
+    while (adjustPositions(positions) && iterations < 15) { // Increased iteration limit
+      iterations++;
+    }
+  
     return positions;
   }, [filteredData]);
+  
 
   if (loading) {
     return (
@@ -196,7 +198,7 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
 
   return (
     <div className="relative h-[80vh] w-[1000px] overflow-y-auto overflow-x-auto">
-      <div className="custom-div" style={{ width: `${CONTAINER_WIDTH}px` }}>
+      <div className="custom-div"  style={{ width: `${CONTAINER_WIDTH}px` }}>
         <div className="absolute -left-[30px] top-0 h-full flex flex-col justify-between text-sm">
           <span>100-</span>
           <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
