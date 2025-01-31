@@ -53,26 +53,13 @@ interface Position {
   y: number;
 }
 
-const BUBBLE_SIZE = 48; // 3rem
-const MIN_DISTANCE = BUBBLE_SIZE + 10; // Size plus margin
-const CONTAINER_WIDTH = 1600; // Increased width
+const CONTAINER_WIDTH = 1600;
 const CONTAINER_HEIGHT = 1200;
+const BUBBLE_SIZE = 48;
+const MIN_DISTANCE = BUBBLE_SIZE + 20;
 
 function calculateDistance(p1: Position, p2: Position): number {
   return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-}
-
-function isValidPosition(position: Position, existingPositions: Position[], containerWidth: number, containerHeight: number): boolean {
-  // Check container boundaries
-  if (position.x < BUBBLE_SIZE || position.x > containerWidth - BUBBLE_SIZE ||
-      position.y < BUBBLE_SIZE || position.y > containerHeight - BUBBLE_SIZE) {
-    return false;
-  }
-
-  // Check collision with other bubbles
-  return !existingPositions.some(pos => 
-    calculateDistance(position, pos) < MIN_DISTANCE
-  );
 }
 
 export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: BitcoinRiskChartProps) {
@@ -131,15 +118,14 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
   const bubblePositions = useMemo(() => {
     const containerWidth = CONTAINER_WIDTH - BUBBLE_SIZE;
     const containerHeight = CONTAINER_HEIGHT - BUBBLE_SIZE;
-  
+
     const positions: Position[] = filteredData.map((item, index) => {
       return {
-        x: Math.min(containerWidth - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, (item.Risk / 100) * containerWidth + (index % 3) * 30 - 30)), // Spread X with slight variation
-        y: containerHeight - (item.Risk / 100) * containerHeight, // Spread Y based on risk
+        x: Math.random() * containerWidth,
+        y: containerHeight - (item.Risk / 100) * containerHeight,
       };
     });
-  
-    // Function to adjust overlapping bubbles
+
     function adjustPositions(positions: Position[]): boolean {
       let moved = false;
       for (let i = 0; i < positions.length; i++) {
@@ -151,7 +137,7 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
           if (distance < MIN_DISTANCE) {
             moved = true;
             const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-            const moveBy = (MIN_DISTANCE - distance) / 2;
+            const moveBy = (MIN_DISTANCE - distance) * 1.2;
             
             positions[i].x = Math.min(containerWidth - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[i].x - Math.cos(angle) * moveBy));
             positions[i].y = Math.min(containerHeight - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[i].y - Math.sin(angle) * moveBy));
@@ -163,16 +149,15 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
       }
       return moved;
     }
-  
+
     // Apply position adjustment iteratively
     let iterations = 0;
-    while (adjustPositions(positions) && iterations < 15) { // Increased iteration limit
+    while (adjustPositions(positions) && iterations < 25) {
       iterations++;
     }
-  
+
     return positions;
   }, [filteredData]);
-  
 
   if (loading) {
     return (
@@ -197,30 +182,12 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
   }
 
   return (
-    <div className="relative h-[80vh] w-[1000px] overflow-y-auto overflow-x-auto">
-      <div className="custom-div"  style={{ width: `${CONTAINER_WIDTH}px` }}>
+    <div className="relative h-[80vh] w-full overflow-y-auto overflow-x-auto">
+      <div className="custom-div" style={{ width: `${CONTAINER_WIDTH}px`, height: `${CONTAINER_HEIGHT}px` }}>
         <div className="absolute -left-[30px] top-0 h-full flex flex-col justify-between text-sm">
-          <span>100-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>80 -</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>60 -</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>40 -</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>20 -</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
-          <span>00 -</span>
+          {[100, 80, 60, 40, 20, 0].map(level => (
+            <span key={level}>{level} -</span>
+          ))}
         </div>
 
         <div className="absolute left-8 top-2 text-lg font-semibold">Risk Levels</div>

@@ -232,7 +232,7 @@ export const BuySignalsPanel: React.FC = () => {
     };
 
     fetchSignals();
-    const interval = setInterval(fetchSignals, 60000); // Refresh every minute
+    const interval = setInterval(fetchSignals, 60000); 
     return () => clearInterval(interval);
   }, []);
 
