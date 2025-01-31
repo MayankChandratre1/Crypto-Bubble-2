@@ -199,7 +199,7 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
   return (
     <div className="relative h-[80vh] w-[1000px] overflow-y-auto overflow-x-auto">
       <div className="custom-div"  style={{ width: `${CONTAINER_WIDTH}px` }}>
-        <div className="absolute -left-[30px] top-0 h-full flex flex-col justify-between text-sm" style={{ width: '30px' }}>
+        <div className="absolute -left-[30px] top-0 h-full flex flex-col justify-between text-sm">
           <span>100-</span>
           <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
           <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-</span>
