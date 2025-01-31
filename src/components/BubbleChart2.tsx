@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, memo } from "react";
+import { useEffect, useMemo, useState, memo, useRef } from "react";
 import { Loader2 } from "lucide-react";
+import * as d3 from 'd3';
 import './bubble.css';
 
 interface CryptoData {
@@ -12,6 +13,10 @@ interface CryptoData {
   "1mChange"?: number;
   "2wChange"?: number;
   "3mChange"?: number;
+  bubbleSize?: number;
+  x?: number;
+  y?: number;
+  radius?:number
 }
 
 interface BubbleProps {
@@ -19,27 +24,48 @@ interface BubbleProps {
   onBubbleClick: (crypto: CryptoData) => void;
 }
 
-const Bubble = memo(({ data, onBubbleClick }: BubbleProps) => (
-  <div className="bubble">
-    <div className="w-12 h-12 rounded-full bg-black/20 backdrop-blur-sm shadow-lg transition-transform hover:scale-105">
-      <div className="w-full h-full rounded-full bg-gradient-to-br from-white/20 to-transparent" />
-    </div>
+const Bubble = memo(({ data, onBubbleClick }: BubbleProps) => {
+  const size = data.bubbleSize ? 48 * data.bubbleSize : 48;
+  
+  // Color calculation based on risk
+  const calculateBubbleColor = (risk: number) => {
+    if (risk >= 50 && risk <= 55) return 'hsl(0, 0%, 50%)'; // Grey for 50-55
+    
+    if (risk < 50) {
+      // Green gradient: 0 (dark green) -> 50 (light green)
+      const intensity = (risk / 50) * 100;
+      return `hsl(${120 - (intensity * 0.5)}, ${70 - (intensity * 0.3)}%, ${30 + (intensity * 0.4)}%)`;
+    }
+    
+    // Red gradient: 55 (light red) -> 100 (dark red)
+    const intensity = ((risk - 55) / 45) * 100;
+    return `hsl(0, ${50 + (intensity * 0.5)}%, ${50 - (intensity * 0.3)}%)`;
+  };
+  return (
+    <div className="bubble">
+      <div 
+        className="rounded-full bg-black/20 backdrop-blur-sm shadow-lg transition-transform hover:scale-105"
+        style={{ width: `${size}px`, height: `${size}px`,  backgroundColor: calculateBubbleColor(data.Risk), }}
+      >
+        <div className="w-full h-full rounded-full bg-gradient-to-br from-white/20 to-transparent" />
+      </div>
 
-    <div 
-      onClick={() => onBubbleClick(data)} 
-      className="absolute inset-0 flex flex-col items-center justify-center text-center group cursor-pointer"
-    >
-      {data?.Icon && <img 
-        src={data.Icon} 
-        alt={data.Symbol} 
-        className="w-1/3 h-1/3 object-contain mb-1"
-        loading="lazy"
-      />}
-      <span className="text-xs font-medium">{data.Symbol}</span>
-      <span className="text-xs font-bold">{data.Risk?.toFixed(1)}%</span>
+      <div 
+        onClick={() => onBubbleClick(data)} 
+        className="absolute inset-0 flex flex-col items-center justify-center text-center group cursor-pointer"
+      >
+        {data?.Icon && <img 
+          src={data.Icon} 
+          alt={data.Symbol} 
+          className="w-1/3 h-1/3 object-contain mb-1"
+          loading="lazy"
+        />}
+        <span className="text-xs font-medium">{data.Symbol}</span>
+        <span className="text-xs font-bold">{data.Risk?.toFixed(1)}%</span>
+      </div>
     </div>
-  </div>
-));
+  );
+});
 
 Bubble.displayName = 'Bubble';
 
@@ -48,25 +74,16 @@ interface BitcoinRiskChartProps {
   selectedRange: string;
 }
 
-interface Position {
-  x: number;
-  y: number;
-}
-
-const CONTAINER_WIDTH = 1600;
-const CONTAINER_HEIGHT = 1200;
-const BUBBLE_SIZE = 48;
-const MIN_DISTANCE = BUBBLE_SIZE + 20;
-
-function calculateDistance(p1: Position, p2: Position): number {
-  return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-}
+const CONTAINER_WIDTH = 1140;
+const CONTAINER_HEIGHT = 600; // Increased height for better level spacing
+const BASE_BUBBLE_SIZE = 80;
 
 export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: BitcoinRiskChartProps) {
   const [data, setData] = useState<CryptoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  const containerRef = useRef<HTMLDivElement>(null);
+ 
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -87,7 +104,8 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
             moralis: result[key].moralisLink,
             "1mChange": result[key]["1mChange"],
             "2wChange": result[key]["2wChange"],
-            "3mChange": result[key]["3mChange"]
+            "3mChange": result[key]["3mChange"],
+            bubbleSize: result[key].bubbleSize // Added bubbleSize
           }))
           .sort((a, b) => (b.volume || 0) - (a.volume || 0));
 
@@ -115,49 +133,70 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
     return data.slice(Math.max(0, start), Math.min(data.length, end));
   }, [data, selectedRange]);
 
-  const bubblePositions = useMemo(() => {
-    const containerWidth = CONTAINER_WIDTH - BUBBLE_SIZE;
-    const containerHeight = CONTAINER_HEIGHT - BUBBLE_SIZE;
+  useEffect(() => {
+    if (!containerRef.current || !filteredData.length) return;
 
-    const positions: Position[] = filteredData.map((item, index) => {
-      return {
-        x: Math.random() * containerWidth,
-        y: containerHeight - (item.Risk / 100) * containerHeight,
-      };
+    const container = d3.select(containerRef.current);
+    container.selectAll("*").remove();
+
+    const initializedData = filteredData.map(d => ({
+      ...d,
+      x: Math.random() * CONTAINER_WIDTH,
+      y: CONTAINER_HEIGHT - (d.Risk / 100) * CONTAINER_HEIGHT,
+      radius: (d.bubbleSize ? (d.bubbleSize * BASE_BUBBLE_SIZE)%200 : BASE_BUBBLE_SIZE) / 2
+    }));
+
+    const simulation = d3.forceSimulation<CryptoData>(initializedData as any)
+      .force("charge", d3.forceManyBody().strength(15))
+      .force("collide", d3.forceCollide<CryptoData>(d => d.radius ? d.radius + 5:5))
+      .force("y", d3.forceY<CryptoData>(d => 
+        CONTAINER_HEIGHT - (d.Risk / 100) * CONTAINER_HEIGHT
+      ).strength(0.5))
+      .force("x", d3.forceX(CONTAINER_WIDTH / 2).strength(0.02))
+      .force("bound", () => {
+        initializedData.forEach(d => {
+          d.x = Math.max(d.radius, Math.min(CONTAINER_WIDTH - d.radius, d.x || 0));
+          d.y = Math.max(d.radius, Math.min(CONTAINER_HEIGHT - d.radius, d.y || 0));
+        });
+      })
+      .alphaDecay(0.02)
+      .alphaTarget(0)
+      .velocityDecay(0.4);
+
+
+      const bubbles = container.selectAll(".bubble-container")
+      .data(initializedData)
+      .enter()
+      .append("div")
+      .attr("class", "bubble-container absolute transform -translate-x-1/2 -translate-y-1/2")
+      .style("left", d => `${d.x}px`)
+      .style("top", d => `${d.y}px`)
+      .html(d => `
+        <div class="bubble m-4">
+          <div class="rounded-full bg-black/20 backdrop-blur-sm shadow-lg transition-transform hover:scale-105"
+               style="width: ${d.radius * 2}px; height: ${d.radius * 2}px">
+            <div class="w-full h-full rounded-full bg-gradient-to-br from-white/20 to-transparent" />
+          </div>
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-center group cursor-pointer">
+            ${d.Icon ? `<img src="${d.Icon}" alt="${d.Symbol}" class="w-1/3 h-1/3 object-contain mb-1" loading="lazy" />` : ''}
+            <span class="text-xs font-medium">${d.Symbol}</span>
+            <span class="text-xs font-bold">${d.Risk?.toFixed(1)}%</span>
+          </div>
+        </div>
+      `)
+      .on("click", (_, d) => onBubbleClick(d));
+
+    simulation.on("tick", () => {
+      bubbles
+        .style("left", d => `${d.x}px`)
+        .style("top", d => `${d.y}px`);
     });
 
-    function adjustPositions(positions: Position[]): boolean {
-      let moved = false;
-      for (let i = 0; i < positions.length; i++) {
-        for (let j = i + 1; j < positions.length; j++) {
-          const p1 = positions[i];
-          const p2 = positions[j];
-          const distance = calculateDistance(p1, p2);
-          
-          if (distance < MIN_DISTANCE) {
-            moved = true;
-            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-            const moveBy = (MIN_DISTANCE - distance) * 1.2;
-            
-            positions[i].x = Math.min(containerWidth - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[i].x - Math.cos(angle) * moveBy));
-            positions[i].y = Math.min(containerHeight - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[i].y - Math.sin(angle) * moveBy));
-            
-            positions[j].x = Math.min(containerWidth - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[j].x + Math.cos(angle) * moveBy));
-            positions[j].y = Math.min(containerHeight - BUBBLE_SIZE, Math.max(BUBBLE_SIZE, positions[j].y + Math.sin(angle) * moveBy));
-          }
-        }
-      }
-      return moved;
+    return () => {
+      simulation.stop();
     }
+  }, [filteredData, onBubbleClick]);
 
-    // Apply position adjustment iteratively
-    let iterations = 0;
-    while (adjustPositions(positions) && iterations < 25) {
-      iterations++;
-    }
-
-    return positions;
-  }, [filteredData]);
 
   if (loading) {
     return (
@@ -182,33 +221,37 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
   }
 
   return (
-    <div className="relative h-[80vh] w-full overflow-y-auto overflow-x-auto">
-      <div className="custom-div" style={{ width: `${CONTAINER_WIDTH}px`, height: `${CONTAINER_HEIGHT}px` }}>
-        <div className="absolute -left-[30px] top-0 h-full flex flex-col justify-between text-sm">
-          {[100, 80, 60, 40, 20, 0].map(level => (
-            <span key={level}>{level} -</span>
-          ))}
-        </div>
+    <div className="relative h-[calc(100vh-200px)] w-full overflow-y-auto overflow-x-auto">
+      <div className="absolute left-0 top-0 flex flex-col text-sm text-white"
+           style={{ width: '30px', height: `${CONTAINER_HEIGHT-50}px` }}>
+        {[100, 80, 60, 40, 20, 0].map(level => (
+          <span 
+            key={level}
+            className="absolute text-xs"
+            style={{ 
+              top: `${CONTAINER_HEIGHT - (level / 100) * CONTAINER_HEIGHT}px`,
+              transform: 'translateY(-10%)'
+            }}
+          >
+            {level} -
+          </span>
+        ))}
+      </div>
 
         <div className="absolute left-8 top-2 text-lg font-semibold">Risk Levels</div>
         <div className="absolute bottom-2 right-4 text-emerald-300 font-medium">UNDERVALUED</div>
         <div className="absolute top-2 right-4 text-red-300 font-medium">OVERVALUED</div>
-
-        {filteredData.map((item, index) => (
-          <div
-            key={item.Symbol}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2"
-            style={{
-              left: `${bubblePositions[index].x}px`,
-              top: `${bubblePositions[index].y}px`,
-            }}
-          >
-            <Bubble
-              data={item}
-              onBubbleClick={onBubbleClick}
-            />
-          </div>
-        ))}
+      <div 
+        ref={containerRef}
+        className="custom-div mx-auto ml-7" 
+        style={{ 
+          width: `${CONTAINER_WIDTH}px`, 
+          height: `${CONTAINER_HEIGHT}px`,
+          position: 'relative',
+          marginTop: '0px'
+        }}
+      >
+        
       </div>
     </div>
   );
