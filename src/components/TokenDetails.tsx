@@ -1,18 +1,27 @@
-import React, { useMemo } from 'react';
-import { X, Star, Edit3, ExternalLink, Calendar, TrendingUp, DollarSign, BarChart3 } from 'lucide-react';
-import { CryptoData, Timeframe } from '../types';
-import { formatNumber, formatPrice } from '../utils';
+import React, { useEffect, useState } from 'react';
+import { 
+  X, 
+  Star, 
+  Calendar, 
+  TrendingUp, 
+  DollarSign, 
+  BarChart3,
+  ExternalLink 
+} from 'lucide-react';
 import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
+import { 
+  Chart as ChartJS, 
+  CategoryScale, 
+  LinearScale, 
+  PointElement, 
+  LineElement, 
+  Title, 
+  Tooltip, 
+  Legend 
 } from 'chart.js';
+import { TokenService, handleApiError } from '../services/api';
+import { useUser } from '../context/UserContext';
+import { formatNumber, formatPrice } from '../utils';
 
 // Register Chart.js components
 ChartJS.register(
@@ -26,67 +35,105 @@ ChartJS.register(
 );
 
 interface TokenDetailsProps {
-  crypto: CryptoData;
+  symbol: string;
+  source?: string;
   onClose: () => void;
-  selectedTimeframe: Timeframe;
-  onTimeframeChange: (timeframe: Timeframe) => void;
+  selectedTimeframe: 'Hour' | 'Day' | 'Week' | 'Month' | 'Year';
+  onTimeframeChange: (timeframe: 'Hour' | 'Day' | 'Week' | 'Month' | 'Year') => void;
 }
 
-const timeframes: Timeframe[] = ['Hour', 'Day', 'Week', 'Month', 'Year'];
+interface TokenData {
+  symbol: string;
+  name: string;
+  price: number;
+  marketCap: number;
+  volume24h: number;
+  percentChange24h: number;
+  rank: number;
+  riskLevel: number;
+  launchDate: string;
+  historicalData?: {
+    timestamp: number;
+    price: number;
+  }[];
+}
 
-const tradingPlatforms = [
-  { name: 'Binance', logo: 'https://cryptologos.cc/logos/binance-coin-bnb-logo.svg?v=025' },
-  { name: 'ByBit', logo: 'https://cryptologos.cc/logos/bybit-bbt-logo.svg?v=025' },
-  { name: 'KuCoin', logo: 'https://cryptologos.cc/logos/kucoin-token-kcs-logo.svg?v=025' }
-];
+const timeframes = ['Hour', 'Day', 'Week', 'Month', 'Year'] as const;
 
-const linkPlatforms = [
-  { name: 'CoinMarketCap', icon: 'CMC', color: 'text-blue-400' },
-  { name: 'CoinGecko', icon: 'CG', color: 'text-green-400' },
-  { name: 'TradingView', icon: 'TV', color: 'text-purple-400' }
-];
-
-export const TokenDetails: React.FC<TokenDetailsProps> = ({
-  crypto,
+const TokenDetails: React.FC<TokenDetailsProps> = ({
+  symbol,
+  source = 'CookieFun',
   onClose,
   selectedTimeframe,
-  onTimeframeChange,
+  onTimeframeChange
 }) => {
-  const timeframePercentages = {
-    Hour: '0%',
-    Day: '-13.7%',
-    Week: '6%',
-    Month: '25.3%',
-    Year: '130%'
+  const { user } = useUser();
+  const [token, setToken] = useState<TokenData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    fetchTokenDetails();
+  }, [symbol, source]);
+
+  const fetchTokenDetails = async () => {
+    try {
+      setLoading(true);
+      const tokenData = await TokenService.getTokenDetails(symbol, source);
+      setToken(tokenData);
+      setIsFavorite(user?.favorites?.includes(symbol) || false);
+    } catch (error) {
+      setError(handleApiError(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const tokenAge = useMemo(() => {
-    if (!crypto.launchDate) return 'Unknown';
-    const launch = new Date(crypto.launchDate);
-    const now = new Date();
-    const diffYears = now.getFullYear() - launch.getFullYear();
-    const diffMonths = now.getMonth() - launch.getMonth();
-    const totalMonths = diffYears * 12 + diffMonths;
-    
-    if (totalMonths < 1) {
-      const diffDays = Math.floor((now.getTime() - launch.getTime()) / (1000 * 60 * 60 * 24));
-      return `${diffDays} days`;
-    } else if (totalMonths < 12) {
-      return `${totalMonths} months`;
-    } else {
-      const years = Math.floor(totalMonths / 12);
-      const remainingMonths = totalMonths % 12;
-      return remainingMonths > 0 ? `${years}y ${remainingMonths}m` : `${years} years`;
+  const handleToggleFavorite = async () => {
+    if (!user) return;
+    try {
+      const { isFavorite: newState } = await TokenService.toggleFavorite(symbol, source);
+      setIsFavorite(newState);
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
     }
-  }, [crypto.launchDate]);
+  };
 
-  // Sample data for the chart
+  const formatTimeframePrices = (timeframe: typeof timeframes[number]) => {
+    if (!token?.historicalData) return null;
+
+    const now = new Date();
+    let startTime: Date;
+    switch (timeframe) {
+      case 'Hour':
+        startTime = new Date(now.getTime() - 60 * 60 * 1000);
+        break;
+      case 'Day':
+        startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case 'Week':
+        startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'Month':
+        startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case 'Year':
+        startTime = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        break;
+    }
+
+    return token.historicalData.filter(d => new Date(d.timestamp).getTime() >= startTime.getTime());
+  };
+
   const chartData = {
-    labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+    labels: formatTimeframePrices(selectedTimeframe)?.map(d => 
+      new Date(d.timestamp).toLocaleDateString()
+    ) || [],
     datasets: [
       {
         label: 'Price',
-        data: [0.32, 0.35, 0.34, 0.38, 0.37, 0.39, 0.40],
+        data: formatTimeframePrices(selectedTimeframe)?.map(d => d.price) || [],
         borderColor: 'rgba(99, 102, 241, 1)',
         backgroundColor: 'rgba(99, 102, 241, 0.2)',
         borderWidth: 2,
@@ -127,26 +174,73 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({
     },
   };
 
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error || !token) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+        <div className="bg-red-50 p-4 rounded-lg">
+          <p className="text-red-600">{error || 'Token not found'}</p>
+          <button 
+            onClick={onClose}
+            className="mt-2 px-4 py-2 bg-red-100 rounded hover:bg-red-200"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const tokenAge = () => {
+    const launch = new Date(token.launchDate);
+    const now = new Date();
+    const diffMonths = (now.getFullYear() - launch.getFullYear()) * 12 + 
+      now.getMonth() - launch.getMonth();
+    
+    if (diffMonths < 1) {
+      const diffDays = Math.floor((now.getTime() - launch.getTime()) / (1000 * 60 * 60 * 24));
+      return `${diffDays} days`;
+    } else if (diffMonths < 12) {
+      return `${diffMonths} months`;
+    } else {
+      const years = Math.floor(diffMonths / 12);
+      const months = diffMonths % 12;
+      return months > 0 ? `${years}y ${months}m` : `${years} years`;
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-gray-900 rounded-xl w-full max-w-3xl mx-4 shadow-2xl border border-gray-800">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500/20 to-purple-600/30 
-              border border-purple-500/30 flex items-center justify-center">
-              <Star className="w-6 h-6 text-yellow-400 fill-yellow-400" />
-            </div>
+            <button
+              onClick={handleToggleFavorite}
+              className={`w-12 h-12 rounded-full flex items-center justify-center
+                ${isFavorite 
+                  ? 'bg-yellow-500/20 text-yellow-400' 
+                  : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'}`}
+            >
+              <Star className={`w-6 h-6 ${isFavorite ? 'fill-current' : ''}`} />
+            </button>
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-white">{crypto.name}</h2>
+                <h2 className="text-2xl font-bold text-white">{token.name}</h2>
                 <span className="text-sm px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                  {crypto.symbol}
+                  {token.symbol}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-400">
                 <Calendar className="w-4 h-4" />
-                <span>Age: {tokenAge}</span>
+                <span>Age: {tokenAge()}</span>
               </div>
             </div>
           </div>
@@ -162,23 +256,12 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({
         <div className="p-6">
           {/* Price and Stats Section */}
           <div className="grid grid-cols-2 gap-6 mb-8">
-            {/* Price Input and Current Price */}
-            <div className="space-y-4">
-              <div className="relative">
-                <Edit3 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input
-                  type="text"
-                  value="1"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg py-3 pl-10 pr-4 text-white
-                    focus:border-purple-500 focus:outline-none transition-colors"
-                />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-white">${formatPrice(crypto.price)}</span>
-                <span className={`text-lg ${crypto.percentChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {crypto.percentChange >= 0 ? '+' : ''}{crypto.percentChange}%
-                </span>
-              </div>
+            {/* Current Price */}
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-white">${formatPrice(token.price)}</span>
+              <span className={`text-lg ${token.percentChange24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {token.percentChange24h >= 0 ? '+' : ''}{token.percentChange24h.toFixed(2)}%
+              </span>
             </div>
 
             {/* Key Stats */}
@@ -188,81 +271,68 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({
                   <TrendingUp size={16} />
                   <span className="text-sm">Rank</span>
                 </div>
-                <div className="text-white font-bold flex items-center gap-2">
-                  #{crypto.rank}
-                  <span className="text-red-500 text-sm">↓7</span>
-                </div>
+                <div className="text-white font-bold">#{token.rank}</div>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-4">
                 <div className="flex items-center gap-2 text-gray-400 mb-1">
                   <DollarSign size={16} />
                   <span className="text-sm">Market Cap</span>
                 </div>
-                <div className="text-white font-bold">${formatNumber(crypto.marketCap)}</div>
+                <div className="text-white font-bold">${formatNumber(token.marketCap)}</div>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-4">
                 <div className="flex items-center gap-2 text-gray-400 mb-1">
                   <BarChart3 size={16} />
                   <span className="text-sm">24h Volume</span>
                 </div>
-                <div className="text-white font-bold">${formatNumber(crypto.volume24h)}</div>
+                <div className="text-white font-bold">${formatNumber(token.volume24h)}</div>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-4">
                 <div className="flex items-center gap-2 text-gray-400 mb-1">
                   <Calendar size={16} />
-                  <span className="text-sm">Launch Date</span>
+                  <span className="text-sm">Risk Level</span>
                 </div>
-                <div className="text-white font-bold">
-                  {crypto.launchDate ? new Date(crypto.launchDate).toLocaleDateString() : 'Unknown'}
-                </div>
+                <div className="text-white font-bold">{token.riskLevel}/100</div>
               </div>
             </div>
           </div>
 
-          {/* Links and Trading Section */}
-          <div className="grid grid-cols-2 gap-6 mb-8">
-            <div>
-              <h3 className="text-gray-400 mb-3 font-medium">Quick Links</h3>
-              <div className="flex gap-3">
-                {linkPlatforms.map(platform => (
-                  <button
-                    key={platform.name}
-                    className={`w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center 
-                      ${platform.color} font-semibold hover:bg-gray-700 transition-colors`}
-                  >
-                    {platform.icon}
-                  </button>
-                ))}
-                <button className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:bg-gray-700">
-                  <ExternalLink size={20} />
-                </button>
-              </div>
-            </div>
-            <div>
-              <h3 className="text-gray-400 mb-3 font-medium">Trade</h3>
-              <div className="flex gap-3">
-                {tradingPlatforms.map(platform => (
-                  <button
-                    key={platform.name}
-                    className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors"
-                  >
-                    <img src={platform.logo} alt={platform.name} className="w-6 h-6" />
-                  </button>
-                ))}
-              </div>
-            </div>
+          {/* External Links */}
+          <div className="flex gap-4 mb-8">
+            <a 
+              href={`https://www.coingecko.com/en/coins/${token.symbol.toLowerCase()}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+            >
+              CoinGecko
+              <ExternalLink size={16} />
+            </a>
+            <a 
+              href={`https://www.tradingview.com/chart/?symbol=${token.symbol}USDT`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+            >
+              TradingView
+              <ExternalLink size={16} />
+            </a>
           </div>
 
           {/* Chart */}
           <div className="relative h-64 mb-6 bg-gray-800/30 rounded-lg p-4">
-            <div className="absolute top-4 left-4 text-green-500 font-medium">${formatPrice(0.3868)}</div>
-            <div className="absolute bottom-4 left-4 text-red-500 font-medium">${formatPrice(0.3214)}</div>
+            <div className="absolute top-4 left-4 text-green-500 font-medium">
+              ${Math.max(...(chartData.datasets[0].data)).toFixed(4)}
+            </div>
+            <div className="absolute bottom-4 left-4 text-red-500 font-medium">
+              ${Math.min(...(chartData.datasets[0].data)).toFixed(4)}
+            </div>
             <Line data={chartData} options={chartOptions} />
           </div>
 
           {/* Timeframe Selector */}
           <div className="flex justify-between items-center bg-gray-800/30 rounded-lg p-2">
-            {timeframes.map(timeframe => (
+            {timeframes.map((timeframe) => (
               <button
                 key={timeframe}
                 onClick={() => onTimeframeChange(timeframe)}
@@ -272,9 +342,6 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({
                     : 'text-gray-400 hover:text-white'}`}
               >
                 {timeframe}
-                <span className={timeframePercentages[timeframe].startsWith('-') ? 'text-red-400' : 'text-green-400'}>
-                  {timeframePercentages[timeframe]}
-                </span>
               </button>
             ))}
           </div>
@@ -283,3 +350,5 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({
     </div>
   );
 };
+
+export default TokenDetails;

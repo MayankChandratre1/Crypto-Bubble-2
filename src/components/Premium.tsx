@@ -1,8 +1,213 @@
-import React from 'react'
+import { useState } from 'react';
+import { useConnect, useAccount, useNetwork } from 'wagmi';
+import { subscriptionPlans } from '../config/payment';
+import { paymentService } from '../services/payment';
+
+declare global {
+  interface Window {
+    ThreeFiPay?: any;
+  }
+}
 
 function Premium() {
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'premium' | 'test'>('premium');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const { connect, connectors } = useConnect();
+  const { address } = useAccount();
+  const { chain } = useNetwork();
+
+  const handlePaymentModalClose = () => {
+    setShowPaymentModal(false);
+    setFullName('');
+    setEmail('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fullName || !email || !address) return;
+
+    try {
+      const planDetails = subscriptionPlans[selectedPlan];
+      
+      // Initialize payment with your backend/service
+      const paymentInit = await paymentService.initializePayment({
+        fullName,
+        email,
+        plan: selectedPlan,
+        amount: planDetails.price
+      });
+
+      // Use 3oomFi's frontend SDK
+      if (window.ThreeFiPay) {
+        const threeFiPay = new window.ThreeFiPay({
+          merchantId: paymentInit.merchantId
+        });
+
+        await threeFiPay.showPaymentModal({
+          walletAddress: address,
+          chainId: chain?.id || 1,
+          paymentData: paymentInit.paymentData,
+          onSuccess: () => {
+            console.log('Payment successful');
+            handlePaymentModalClose();
+          },
+          onFailure: (error: Error) => {
+            console.error('Payment failed:', error);
+          },
+          onClose: () => {
+            console.log('Payment modal closed');
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Payment initialization failed:', error);
+    }
+  };
+
+  const PaymentModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="w-full max-w-md bg-white rounded-lg p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+            <svg className="w-8 h-8 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-xl font-medium">
+              {subscriptionPlans[selectedPlan].name}
+            </h2>
+            <p className="text-gray-600">
+              ${subscriptionPlans[selectedPlan].price}/month
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm">
+                1
+              </div>
+              <h3 className="text-lg font-medium">Personal Information</h3>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                {!fullName && (
+                  <p className="text-red-500 text-sm mt-1">Full name is required</p>
+                )}
+              </div>
+              
+              <div>
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-gray-500 text-sm mt-1">
+                  Get transaction updates and receipt notifications via email
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-sm">
+                2
+              </div>
+              <h3 className="text-lg font-medium">Payment Method</h3>
+            </div>
+
+            <div className="space-y-2">
+              {!address ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rainbowConnector = connectors.find(c => c.id === 'rainbow');
+                    if (rainbowConnector) connect({ connector: rainbowConnector });
+                  }}
+                  className="w-full flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                >
+                  <span className="text-gray-700">Connect Wallet</span>
+                  <div className="flex gap-2">
+                    <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                    </div>
+                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h.01M15 10h.01M9 14h6" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              ) : (
+                <div className="w-full p-3 border rounded-lg bg-gray-50">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Connected: {address.slice(0, 6)}...{address.slice(-4)}</span>
+                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-gray-500 text-sm justify-center">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            Secure and encrypted payment
+          </div>
+
+          <button
+            type="submit"
+            className={`w-full py-3 rounded-lg font-medium ${
+              address && fullName && email 
+                ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                : 'bg-gray-200 text-gray-500'
+            }`}
+            disabled={!address || !fullName || !email}
+          >
+            Continue
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+
   return (
-    <div>           <svg width="308" height="209" viewBox="0 0 308 209" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div className="relative">           
+      <svg width="308" 
+        height="209" 
+        viewBox="0 0 308 209" 
+        fill="none" 
+        xmlns="http://www.w3.org/2000/svg"
+        onClick={() => {
+          setSelectedPlan('premium');
+          setShowPaymentModal(true);
+        }}
+        className="cursor-pointer hover:opacity-90 transition-opacity">
     <rect width="308" height="209" rx="8" fill="#1A1C2A"/>
     <rect x="0.5" y="0.5" width="307" height="208" rx="7.5" stroke="#8F8F8F" stroke-opacity="0.24"/>
     <path d="M34.2148 107.23V110.688H32.3867V107.23H34.2148ZM33.9922 126.367V129.52H32.1641V126.367H33.9922ZM35.2812 122.523C35.2812 122.078 35.1992 121.699 35.0352 121.387C34.8789 121.074 34.6211 120.797 34.2617 120.555C33.9102 120.312 33.4336 120.078 32.832 119.852C31.8164 119.461 30.9219 119.047 30.1484 118.609C29.3828 118.164 28.7852 117.613 28.3555 116.957C27.9258 116.293 27.7109 115.453 27.7109 114.438C27.7109 113.469 27.9414 112.629 28.4023 111.918C28.8633 111.207 29.5 110.66 30.3125 110.277C31.1328 109.887 32.0859 109.691 33.1719 109.691C34 109.691 34.75 109.816 35.4219 110.066C36.0938 110.309 36.6719 110.668 37.1562 111.145C37.6406 111.613 38.0117 112.188 38.2695 112.867C38.5273 113.547 38.6562 114.324 38.6562 115.199H35.293C35.293 114.73 35.2422 114.316 35.1406 113.957C35.0391 113.598 34.8906 113.297 34.6953 113.055C34.5078 112.812 34.2812 112.633 34.0156 112.516C33.75 112.391 33.457 112.328 33.1367 112.328C32.6602 112.328 32.2695 112.422 31.9648 112.609C31.6602 112.797 31.4375 113.051 31.2969 113.371C31.1641 113.684 31.0977 114.043 31.0977 114.449C31.0977 114.848 31.168 115.195 31.3086 115.492C31.457 115.789 31.7109 116.062 32.0703 116.312C32.4297 116.555 32.9219 116.805 33.5469 117.062C34.5625 117.453 35.4531 117.875 36.2188 118.328C36.9844 118.781 37.582 119.336 38.0117 119.992C38.4414 120.648 38.6562 121.484 38.6562 122.5C38.6562 123.508 38.4219 124.367 37.9531 125.078C37.4844 125.781 36.8281 126.32 35.9844 126.695C35.1406 127.062 34.1641 127.246 33.0547 127.246C32.3359 127.246 31.6211 127.152 30.9102 126.965C30.1992 126.77 29.5547 126.457 28.9766 126.027C28.3984 125.598 27.9375 125.027 27.5938 124.316C27.25 123.598 27.0781 122.715 27.0781 121.668H30.4531C30.4531 122.238 30.5273 122.715 30.6758 123.098C30.8242 123.473 31.0195 123.773 31.2617 124C31.5117 124.219 31.793 124.375 32.1055 124.469C32.418 124.562 32.7344 124.609 33.0547 124.609C33.5547 124.609 33.9648 124.52 34.2852 124.34C34.6133 124.16 34.8594 123.914 35.0234 123.602C35.1953 123.281 35.2812 122.922 35.2812 122.523ZM54.1062 120.625V123.273H41.8133L41.6492 121.223L48.7625 109.938H51.4461L48.5398 114.801L45.0008 120.625H54.1062ZM52.1727 109.938V127H48.7977V109.938H52.1727ZM59.525 124.434H59.7477C60.6852 124.434 61.4898 124.32 62.1617 124.094C62.8414 123.859 63.4 123.523 63.8375 123.086C64.275 122.648 64.5992 122.113 64.8102 121.48C65.0211 120.84 65.1266 120.113 65.1266 119.301V116.066C65.1266 115.449 65.0641 114.906 64.9391 114.438C64.8219 113.969 64.65 113.582 64.4234 113.277C64.2047 112.965 63.9469 112.73 63.65 112.574C63.3609 112.418 63.0406 112.34 62.6891 112.34C62.3141 112.34 61.982 112.434 61.693 112.621C61.4039 112.801 61.1578 113.047 60.9547 113.359C60.7594 113.672 60.607 114.031 60.4977 114.438C60.3961 114.836 60.3453 115.254 60.3453 115.691C60.3453 116.129 60.3961 116.547 60.4977 116.945C60.5992 117.336 60.7516 117.684 60.9547 117.988C61.1578 118.285 61.4117 118.523 61.7164 118.703C62.0211 118.875 62.3805 118.961 62.7945 118.961C63.193 118.961 63.5484 118.887 63.8609 118.738C64.1812 118.582 64.4508 118.379 64.6695 118.129C64.8961 117.879 65.068 117.602 65.1852 117.297C65.3102 116.992 65.3727 116.684 65.3727 116.371L66.4859 116.98C66.4859 117.527 66.3687 118.066 66.1344 118.598C65.9 119.129 65.5719 119.613 65.15 120.051C64.7359 120.48 64.2555 120.824 63.7086 121.082C63.1617 121.34 62.5758 121.469 61.9508 121.469C61.1539 121.469 60.4469 121.324 59.8297 121.035C59.2125 120.738 58.6891 120.332 58.2594 119.816C57.8375 119.293 57.5172 118.684 57.2984 117.988C57.0797 117.293 56.9703 116.539 56.9703 115.727C56.9703 114.898 57.1031 114.121 57.3687 113.395C57.6422 112.668 58.0289 112.027 58.5289 111.473C59.0367 110.918 59.6422 110.484 60.3453 110.172C61.0562 109.852 61.8453 109.691 62.7125 109.691C63.5797 109.691 64.3687 109.859 65.0797 110.195C65.7906 110.531 66.4 111.008 66.9078 111.625C67.4156 112.234 67.8062 112.965 68.0797 113.816C68.3609 114.668 68.5016 115.613 68.5016 116.652V117.824C68.5016 118.934 68.3805 119.965 68.1383 120.918C67.9039 121.871 67.5484 122.734 67.0719 123.508C66.6031 124.273 66.0172 124.93 65.3141 125.477C64.6187 126.023 63.8102 126.441 62.8883 126.73C61.9664 127.02 60.9352 127.164 59.7945 127.164H59.525V124.434Z" fill="white"/>
@@ -20,7 +225,9 @@ function Premium() {
     <rect width="28" height="28" fill="white" transform="translate(26 19)"/>
     </clipPath>
     </defs>
-    </svg></div>
+    </svg>
+      {showPaymentModal && <PaymentModal />}
+    </div>
   )
 }
 

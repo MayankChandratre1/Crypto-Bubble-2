@@ -1,10 +1,16 @@
-import  { useState } from 'react';
+import { useState } from 'react';
 import { CryptoData, Timeframe } from './types';
 import { BuySignalsPanel } from './components/BuySignalsPanel';
 import { Wget } from './components/Chart';
 import BitcoinRiskChart from './components/BubbleChart2';
 import DexRisks from './components/FetchData';
 import { Navbar } from './components/Navbar';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { WagmiConfig } from 'wagmi';
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { wagmiConfig, chains } from './config/payment';
+import PaymentModal from './components/PaymentModal';
+import '@rainbow-me/rainbowkit/styles.css';
 
 const mockData: CryptoData[] = [
   {
@@ -69,6 +75,67 @@ const mockData: CryptoData[] = [
   }
 ];
 
+// Create a wrapper component for PaymentModal to handle navigation
+const PaymentModalWrapper = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const planType = queryParams.get('plan') as 'premium' | 'test' || 'premium';
+  const amount = planType === 'premium' ? 49 : 1;
+  const description = planType === 'premium' 
+    ? 'Access to Buy Signals & two Premium TradingView scripts'
+    : 'Testing CoinChart subscription';
+  
+  return (
+    <PaymentModal 
+      isOpen={true}
+      onClose={() => navigate('/')}
+      planType={planType}
+      amount={amount}
+      description={description}
+    />
+  );
+};
+
+// Success Page Component
+const PaymentSuccessPage = () => {
+  const navigate = useNavigate();
+  return (
+    <div className="h-screen w-screen flex items-center justify-center bg-black">
+      <div className="text-white text-center">
+        <h1 className="text-2xl mb-4">Payment Successful!</h1>
+        <p className="mb-4">Your premium subscription is now active</p>
+        <button 
+          onClick={() => navigate('/')}
+          className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Cancel Page Component
+const PaymentCancelPage = () => {
+  const navigate = useNavigate();
+  return (
+    <div className="h-screen w-screen flex items-center justify-center bg-black">
+      <div className="text-white text-center">
+        <h1 className="text-2xl mb-4">Payment Cancelled</h1>
+        <p className="mb-4">Your payment was not completed</p>
+        <button 
+          onClick={() => navigate('/')}
+          className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Main App Component
 function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRange, setSelectedRange] = useState("Top 100");
@@ -84,28 +151,36 @@ function App() {
   }
 
   return (
-          <div className="max-h-screen max-w-screen bg-black flex overflow-hidden">
-            <div className="flex-1 flex flex-col">
-            <Navbar onRangeChange={setSelectedRange} />
-              {/* <div className='bg-white'>
-              <DexRisks/>
-              </div> */}
-              <div className="flex-1 p-6">
-                <div className="max-w-7xl mx-auto">
-                <BitcoinRiskChart 
-                  selectedRange={selectedRange}
-                  onBubbleClick={handleBubbleClick} 
-                />
-
-
-                  {selectedCrypto && (
-                    <Wget onClose={() => setSelectedCrypto(null)}/>
-                  )}
+    <WagmiConfig config={wagmiConfig}>
+      <RainbowKitProvider chains={chains}>
+        <Router>
+          <Routes>
+            <Route path="/" element={
+              <div className="max-h-screen max-w-screen bg-black flex overflow-hidden">
+                <div className="flex-1 flex flex-col">
+                  <Navbar onRangeChange={setSelectedRange} />
+                  <div className="flex-1 p-6">
+                    <div className="max-w-7xl mx-auto">
+                      <BitcoinRiskChart 
+                        selectedRange={selectedRange}
+                        onBubbleClick={(crypto: CryptoData) => handleBubbleClick(crypto)}
+                      />
+                      {selectedCrypto && (
+                        <Wget onClose={() => setSelectedCrypto(null)}/>
+                      )}
+                    </div>
+                  </div>
                 </div>
+                <BuySignalsPanel />
               </div>
-            </div>
-            <BuySignalsPanel />
-          </div>
+            } />
+            <Route path="/payment" element={<PaymentModalWrapper />} />
+            <Route path="/payment/success" element={<PaymentSuccessPage />} />
+            <Route path="/payment/cancel" element={<PaymentCancelPage />} />
+          </Routes>
+        </Router>
+      </RainbowKitProvider>
+    </WagmiConfig>
   );
 }
 
