@@ -54,7 +54,7 @@ export const BuySignalsPanel: React.FC = () => {
   }, []);
 
   const handleUpgradeToPremium = () => {
-    navigate('/payment?plan=premium');
+    window.open('https://pay.boomfi.xyz/2rwqC9PH4zXMNqTupAXjsNyNJ3v', '_blank');
   };
 
   return (
