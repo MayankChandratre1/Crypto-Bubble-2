@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, memo, useRef } from "react";
-import { Loader2, GripVertical } from "lucide-react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { Loader2 } from "lucide-react";
 import * as d3 from 'd3';
 import './bubble.css';
 
@@ -19,77 +19,47 @@ interface CryptoData {
   radius?: number;
 }
 
-interface BubbleProps {
-  data: CryptoData;
-  onBubbleClick: (crypto: CryptoData) => void;
-}
-
-const Bubble = memo(({ data, onBubbleClick }: BubbleProps) => {
-  const size = data.bubbleSize ? 48 * data.bubbleSize : 48;
-  
-  const calculateBubbleColor = (risk: number) => {
-    if (risk >= 50 && risk <= 55) return 'hsl(0, 0%, 50%)';
-    
-    if (risk < 50) {
-      const intensity = (risk / 50) * 100;
-      return `hsl(${120 - (intensity * 0.5)}, ${70 - (intensity * 0.3)}%, ${30 + (intensity * 0.4)}%)`;
-    }
-    
-    const intensity = ((risk - 55) / 45) * 100;
-    return `hsl(0, ${50 + (intensity * 0.5)}%, ${50 - (intensity * 0.3)}%)`;
-  };
-
-  return (
-    <div className="bubble">
-      <div 
-        className="rounded-full bg-black/20 backdrop-blur-sm shadow-lg transition-transform hover:scale-105"
-        style={{ 
-          width: `${size}px`, 
-          height: `${size}px`, 
-          backgroundColor: calculateBubbleColor(data.Risk) 
-        }}
-      >
-        <div className="w-full h-full rounded-full bg-gradient-to-br from-white/20 to-transparent" />
-      </div>
-
-      <div 
-        onClick={() => onBubbleClick(data)} 
-        className="absolute inset-0 flex flex-col items-center justify-center text-center group cursor-pointer"
-      >
-        {data?.Icon && <img 
-          src={data.Icon} 
-          alt={data.Symbol} 
-          className="w-1/3 h-1/3 object-contain mb-1"
-          loading="lazy"
-        />}
-        <span className="text-xs font-medium">{data.Symbol}</span>
-        <span className="text-xs font-bold">{data.Risk?.toFixed(1)}%</span>
-      </div>
-    </div>
-  );
-});
-
-Bubble.displayName = 'Bubble';
-
 interface BitcoinRiskChartProps {
   onBubbleClick: (crypto: CryptoData) => void;
   selectedRange: string;
+  isCollapsed?: boolean;
 }
 
-const CONTAINER_WIDTH = 1140;
-const MIN_WIDTH = 800;
 const CONTAINER_HEIGHT = 600;
 
-export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: BitcoinRiskChartProps) {
+export default function BitcoinRiskChart({ onBubbleClick, selectedRange, isCollapsed }: BitcoinRiskChartProps) {
   const [data, setData] = useState<CryptoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [chartWidth, setChartWidth] = useState(CONTAINER_WIDTH);
-  const [isResizing, setIsResizing] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [startWidth, setStartWidth] = useState(CONTAINER_WIDTH);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const simulationRef = useRef<d3.Simulation<CryptoData, undefined> | null>(null);
+  const isInitializedRef = useRef(false);
 
+  // Handle container width updates
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const newWidth = containerRef.current.clientWidth - (isCollapsed ? 24 : 48);
+        setContainerWidth(newWidth);
+      }
+    };
+
+    updateWidth();
+    const resizeObserver = new ResizeObserver(() => {
+      updateWidth();
+    });
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isCollapsed]);
+
+  // Data fetching with auto-refresh
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -124,6 +94,9 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
     };
 
     fetchData();
+    const interval = setInterval(fetchData, 60000); // Refresh every minute
+    
+    return () => clearInterval(interval);
   }, []);
 
   const filteredData = useMemo(() => {
@@ -139,99 +112,99 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
     return data.slice(Math.max(0, start), Math.min(data.length, end));
   }, [data, selectedRange]);
 
+  const calculateBubbleColor = (risk: number) => {
+    if (risk >= 50 && risk <= 55) return 'hsl(0, 0%, 50%)'; // Grey for 50-55
+    
+    if (risk < 50) {
+      // Green gradient: 0 (dark green) -> 50 (light green)
+      const intensity = (risk / 50) * 100;
+      return `hsl(${120 - (intensity * 0.5)}, ${70 - (intensity * 0.3)}%, ${30 + (intensity * 0.4)}%)`;
+    }
+    
+    // Red gradient: 55 (light red) -> 100 (dark red)
+    const intensity = ((risk - 55) / 45) * 100;
+    return `hsl(0, ${50 + (intensity * 0.5)}%, ${50 - (intensity * 0.3)}%)`;
+  };
+
+  // Initialize and update simulation
   useEffect(() => {
-    if (!containerRef.current || !filteredData.length) return;
+    if (!containerRef.current || !filteredData.length || !containerWidth) return;
+
+    if (simulationRef.current) {
+      simulationRef.current.stop();
+    }
 
     const container = d3.select(containerRef.current);
     container.selectAll("*").remove();
 
+    const bubbleContainer = container
+      .append("div")
+      .attr("class", "bubbles-wrapper")
+      .style("position", "absolute")
+      .style("inset", "0")
+      .style("overflow", "visible")
+      .style("pointer-events", "none");
+
     const initializedData = filteredData.map(d => ({
       ...d,
-      x: Math.random() * chartWidth,
-      y: CONTAINER_HEIGHT - (d.Risk / 100) * CONTAINER_HEIGHT,
+      x: containerWidth / 2,
+      y: CONTAINER_HEIGHT * (1 - d.Risk / 100),
       radius: (d.bubbleSize ? (d.bubbleSize * 48) % 200 : 48) / 2
     }));
+    
 
     const simulation = d3.forceSimulation<CryptoData>(initializedData as any)
-      .force("charge", d3.forceManyBody().strength(15))
-      .force("collide", d3.forceCollide<CryptoData>(d => d.radius ? d.radius + 5 : 5))
+      .force("x", d3.forceX(containerWidth / 2).strength(0.1))
       .force("y", d3.forceY<CryptoData>(d => 
-        CONTAINER_HEIGHT - (d.Risk / 100) * CONTAINER_HEIGHT
-      ).strength(0.5))
-      .force("x", d3.forceX(chartWidth / 2).strength(0.02))
-      .force("bound", () => {
-        initializedData.forEach(d => {
-          d.x = Math.max(d.radius || 0, Math.min(chartWidth - (d.radius || 0), d.x || 0));
-          d.y = Math.max(d.radius || 0, Math.min(CONTAINER_HEIGHT - (d.radius || 0), d.y || 0));
-        });
-      })
-      .alphaDecay(0.02)
-      .alphaTarget(0)
-      .velocityDecay(0.4);
+        20 + CONTAINER_HEIGHT * (1 - d.Risk / 100)
+      ).strength(1))
+      .force("collide", d3.forceCollide().radius(d => ( 24) + 5))
+      .force("charge", d3.forceManyBody().strength(-30))
+      .alphaDecay(0.01) // Slower decay for smoother animation
+      .velocityDecay(0.4); // Adjust for better movement
 
-    const bubbles = container.selectAll(".bubble-container")
+    simulationRef.current = simulation;
+
+    
+    const bubbles = bubbleContainer.selectAll(".bubble-container")
       .data(initializedData)
       .enter()
       .append("div")
-      .attr("class", "bubble-container absolute transform -translate-x-1/2 -translate-y-1/2")
-      .style("left", d => `${d.x}px`)
-      .style("top", d => `${d.y}px`)
+      .attr("class", "bubble-container")
+      .style("position", "absolute")
+      .style("pointer-events", "auto")
+      .style("opacity", "0") // Start with opacity 0
       .html(d => `
         <div class="bubble">
           <div class="rounded-full bg-black/20 backdrop-blur-sm shadow-lg transition-transform hover:scale-105"
-               style="width: ${d.radius * 2}px; height: ${d.radius * 2}px">
+               style="width: ${d.radius * 2}px; height: ${d.radius * 2}px;  background-color: ${calculateBubbleColor(d.Risk)}">
             <div class="w-full h-full rounded-full bg-gradient-to-br from-white/20 to-transparent" />
           </div>
           <div class="absolute inset-0 flex flex-col items-center justify-center text-center group cursor-pointer">
             ${d.Icon ? `<img src="${d.Icon}" alt="${d.Symbol}" class="w-1/3 h-1/3 object-contain mb-1" loading="lazy" />` : ''}
-            <span class="text-xs font-medium">${d.Symbol}</span>
-            <span class="text-xs font-bold">${d.Risk?.toFixed(1)}%</span>
+            <span class="text-xs font-medium text-white">${d.Symbol}</span>
+            <span class="text-xs font-bold text-white">${d.Risk?.toFixed(1)}%</span>
           </div>
         </div>
       `)
       .on("click", (_, d) => onBubbleClick(d));
 
+    // Fade in bubbles
+    bubbles.transition()
+      .duration(500)
+      .style("opacity", "1");
+
     simulation.on("tick", () => {
-      bubbles
-        .style("left", d => `${d.x}px`)
-        .style("top", d => `${d.y}px`);
+      bubbles.style("transform", d => `translate(${d.x}px, ${d.y}px)`);
     });
+
+    isInitializedRef.current = true;
 
     return () => {
       simulation.stop();
+      simulationRef.current = null;
     };
-  }, [filteredData, chartWidth, onBubbleClick]);
-
-  const handleResizeStart = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    setStartX(e.clientX);
-    setStartWidth(chartWidth);
-  };
-
-  const handleResize = (e: MouseEvent) => {
-    if (!isResizing) return;
-    
-    const newWidth = Math.max(MIN_WIDTH, Math.min(
-      startWidth + (e.clientX - startX),
-      window.innerWidth - 100
-    ));
-    setChartWidth(newWidth);
-  };
-
-  const handleResizeEnd = () => {
-    setIsResizing(false);
-  };
-
-  useEffect(() => {
-    if (isResizing) {
-      window.addEventListener('mousemove', handleResize);
-      window.addEventListener('mouseup', handleResizeEnd);
-      return () => {
-        window.removeEventListener('mousemove', handleResize);
-        window.removeEventListener('mouseup', handleResizeEnd);
-      };
-    }
-  }, [isResizing, startWidth, startX]);
+  }, [filteredData, containerWidth, onBubbleClick]);
 
   if (loading) {
     return (
@@ -256,8 +229,8 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
   }
 
   return (
-    <div className="relative flex">
-      <div className="relative bg-black flex-grow overflow-hidden" style={{ height: CONTAINER_HEIGHT }}>
+    <div className="relative w-full h-full">
+      <div className="relative bg-black" style={{ height: CONTAINER_HEIGHT }}>
         <div className="absolute left-0 top-0 flex flex-col text-sm text-white"
              style={{ width: '30px', height: `${CONTAINER_HEIGHT-50}px` }}>
           {[100, 80, 60, 40, 20, 0].map(level => (
@@ -280,21 +253,12 @@ export default function BitcoinRiskChart({ onBubbleClick, selectedRange }: Bitco
 
         <div 
           ref={containerRef}
-          className="custom-div mx-auto ml-7" 
+          className="custom-div ml-7" 
           style={{ 
-            width: `${chartWidth}px`, 
-            height: `${CONTAINER_HEIGHT}px`,
             position: 'relative',
-            marginTop: '0px'
+            height: `${CONTAINER_HEIGHT}px`,
           }}
         />
-      </div>
-      
-      <div
-        className="w-2 bg-gray-800 cursor-col-resize flex items-center justify-center hover:bg-gray-700"
-        onMouseDown={handleResizeStart}
-      >
-        <GripVertical className="w-4 h-4 text-gray-400" />
       </div>
     </div>
   );

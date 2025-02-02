@@ -1,14 +1,16 @@
-import { useState } from 'react';
-import { CryptoData, Timeframe } from './types';
-import { BuySignalsPanel } from './components/BuySignalsPanel';
-import { Wget } from './components/Chart';
-import BitcoinRiskChart from './components/BubbleChart2';
-import DexRisks from './components/FetchData';
-import { Navbar } from './components/Navbar';
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
 import { WagmiConfig } from 'wagmi';
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { wagmiConfig, chains } from './config/payment';
+import { Navbar } from './components/Navbar';
+import ResizableLayout from './components/Resizablecomponent';
+import BitcoinRiskChart from './components/BubbleChart2';
+import { BuySignalsPanel } from './components/BuySignalsPanel';
+import { Wget } from './components/Chart';
+import { useNavigate, useLocation } from 'react-router-dom';
+
+import { CryptoData } from './types';
 import PaymentModal from './components/PaymentModal';
 import '@rainbow-me/rainbowkit/styles.css';
 
@@ -156,14 +158,15 @@ function App() {
         <Router>
           <Routes>
             <Route path="/" element={
-              <div className="max-h-screen max-w-screen bg-black flex overflow-hidden">
+              <ResizableLayout rightPanel={<BuySignalsPanel />}>
                 <div className="flex-1 flex flex-col">
                   <Navbar onRangeChange={setSelectedRange} />
                   <div className="flex-1 p-6">
-                    <div className="max-w-7xl mx-auto">
+                    <div className="w-full h-full">
                       <BitcoinRiskChart 
                         selectedRange={selectedRange}
                         onBubbleClick={(crypto: CryptoData) => handleBubbleClick(crypto)}
+                        // isCollapsed will be injected by ResizableLayout
                       />
                       {selectedCrypto && (
                         <Wget onClose={() => setSelectedCrypto(null)}/>
@@ -171,8 +174,7 @@ function App() {
                     </div>
                   </div>
                 </div>
-                <BuySignalsPanel />
-              </div>
+              </ResizableLayout>
             } />
             <Route path="/payment" element={<PaymentModalWrapper />} />
             <Route path="/payment/success" element={<PaymentSuccessPage />} />

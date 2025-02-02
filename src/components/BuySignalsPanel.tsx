@@ -1,18 +1,17 @@
+// BuySignalsPanel.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useConnect, useAccount } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { 
   Crown,
-  ChevronDown,
+  ChevronUp,
   ChevronRight,
   CheckCircle,
   XCircle,
-  ExternalLink,
-  ChevronUp,
-  LucideAlertTriangle,
+  ChevronLast,
+  ChevronFirst,
   Lock, 
-  User,
-  Plus
+  User
 } from 'lucide-react';
 import { FaTelegram } from 'react-icons/fa';
 
@@ -27,11 +26,14 @@ interface SignalData {
   danger: number;
 }
 
+const DEFAULT_WIDTH = 400;
+
 export const BuySignalsPanel: React.FC = () => {
   const [signals, setSignals] = useState<SignalData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPremium, setIsPremium] = useState(false);
   const [expandedSignal, setExpandedSignal] = useState<string | null>(null);
+  
   const navigate = useNavigate();
   const { address } = useAccount();
 
@@ -58,7 +60,7 @@ export const BuySignalsPanel: React.FC = () => {
   };
 
   return (
-    <div className="w-full lg:w-80 bg-black border-l border-gray-800/80 flex flex-col h-screen">
+    <div className="h-full bg-black border-l border-gray-800/80 flex flex-col">
       <div className="flex items-center justify-between p-4 bg-[#19202F]">
         <div className="flex items-center gap-2">
           {isPremium ? (

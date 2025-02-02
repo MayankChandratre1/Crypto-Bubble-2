@@ -199,7 +199,8 @@ export const Navbar = ({
                     setActiveStrategyId(strategy.id);
                     onStrategyChange?.(strategy);
                   }}
-                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full ${getButtonStyle(strategy.id)}`}
+                  
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full ${getButtonStyle(strategy.id)} `}
                 >
                   {strategy.name}
                   {strategy.type === 'short' && (
