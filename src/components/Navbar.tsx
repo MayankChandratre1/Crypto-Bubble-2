@@ -6,26 +6,38 @@ interface Strategy {
   id: string;
   name: string;
   type: 'short' | 'long' | 'rsi';
+  filters?: {
+    skipTraps?: boolean;
+    avoidHype?: boolean;
+    minMarketCap?: number;
+  };
 }
 
 interface Token {
   id: string;
   name: string;
-  type: 'ai' | 'binance' | 'bybit';
+  type: 'binance' | 'bybit' | 'ai';
 }
 
 interface NavbarProps {
   onRangeChange: (range: string) => void;
+  onStrategyChange?: (strategy: Strategy) => void;
+  onTokenSourceChange?: (source: Token['type']) => void;
 }
 
-export const Navbar = ({ onRangeChange }: NavbarProps) => {
+export const Navbar = ({ 
+  onRangeChange, 
+  onStrategyChange,
+  onTokenSourceChange 
+}: NavbarProps) => {
   const [showRankDropdown, setShowRankDropdown] = useState(false);
   const [showStrategySelector, setShowStrategySelector] = useState(false);
   const [showTokenSelector, setShowTokenSelector] = useState(false);
   const [showShortTermDropdown, setShowShortTermDropdown] = useState(false);
+  const [selectedRange, setSelectedRange] = useState("Top 100");
+  const [searchTerm, setSearchTerm] = useState("");
   const [activeStrategyId, setActiveStrategyId] = useState('1');
   const [selectedTokenType, setSelectedTokenType] = useState<'binance' | 'bybit' | 'ai'>('binance');
-  const [selectedRange, setSelectedRange] = useState("Top 100");
 
   const [selectedStrategies, setSelectedStrategies] = useState<Strategy[]>([
     { id: '1', name: 'Short-Term', type: 'short' },
@@ -37,23 +49,25 @@ export const Navbar = ({ onRangeChange }: NavbarProps) => {
     { id: '2', name: 'Bybit', type: 'bybit' }
   ]);
 
-  const handleRangeChange = (range: string) => {
-    setSelectedRange(range);
-    setShowRankDropdown(false);
-    onRangeChange(range);
-  }
-
+  // Available strategies
   const allStrategies: Strategy[] = [
     { id: '1', name: 'Short-Term', type: 'short' },
     { id: '2', name: 'Long-Term', type: 'long' },
     { id: '3', name: 'RSI', type: 'rsi' }
   ];
 
+  // Available tokens sources
   const allTokens: Token[] = [
     { id: '1', name: 'Binance', type: 'binance' },
     { id: '2', name: 'Bybit', type: 'bybit' },
     { id: '3', name: 'AI Agent', type: 'ai' }
   ];
+
+  const handleRangeChange = (range: string) => {
+    setSelectedRange(range);
+    setShowRankDropdown(false);
+    onRangeChange(range);
+  };
 
   const toggleStrategy = (strategy: Strategy) => {
     if (selectedStrategies.find(s => s.id === strategy.id)) {
@@ -62,67 +76,47 @@ export const Navbar = ({ onRangeChange }: NavbarProps) => {
         if (strategy.id === activeStrategyId) {
           const remainingStrategies = selectedStrategies.filter(s => s.id !== strategy.id);
           setActiveStrategyId(remainingStrategies[0].id);
+          onStrategyChange?.(remainingStrategies[0]);
         }
       }
     } else {
-      setSelectedStrategies([...selectedStrategies, strategy]);
+      const updatedStrategies = [...selectedStrategies, strategy];
+      setSelectedStrategies(updatedStrategies);
+      onStrategyChange?.(strategy);
     }
   };
-
-
 
   const toggleToken = (token: Token) => {
     setSelectedTokenType(token.type);
     if (!selectedTokens.find(t => t.id === token.id)) {
-      setSelectedTokens([...selectedTokens, token]);
+      const updatedTokens = [...selectedTokens, token];
+      setSelectedTokens(updatedTokens);
+      onTokenSourceChange?.(token.type);
     }
   };
 
-  const getButtonStyle1 = (strategyId: string) => {
+  const getButtonStyle = (strategyId: string) => {
     const isActive = strategyId === activeStrategyId;
     return isActive 
       ? 'bg-[#1B61B3] text-[#F6F6F6] hover:bg-blue-500/30'
       : 'bg-gray-700 text-[#F6F6F6] hover:bg-gray-600';
   };
 
-  const getTokenButtonStyle2 = (type: 'binance' | 'bybit' | 'ai') => {
-    switch (type) {
-      case 'binance':
-        return type === selectedTokenType
-          ? 'bg-[#1B61B3] text-[#F6F6F6] hover:bg-blue-500/30'
-          : 'bg-gray-700 text-gray-300 hover:bg-gray-600';
-      case 'bybit':
-        return type === selectedTokenType
-          ? 'bg-[#1B61B3] text-[#F6F6F6] hover:bg-blue-500/30'
-          : 'bg-gray-700 text-gray-300 hover:bg-gray-600';
-      case 'ai':
-        return type === selectedTokenType
-          ? 'bg-[#1B61B3] text-[#F6F6F6] hover:bg-blue-500/30'
-          : 'bg-gray-700 text-gray-300 hover:bg-gray-600';
-    }
+  const getTokenButtonStyle = (type: 'binance' | 'bybit' | 'ai') => {
+    return type === selectedTokenType
+      ? 'bg-[#1B61B3] text-[#F6F6F6] hover:bg-blue-500/30'
+      : 'bg-gray-700 text-gray-300 hover:bg-gray-600';
   };
 
   const getSelectorItemStyle = (type: 'short' | 'long' | 'rsi' | 'ai' | 'binance' | 'bybit', isSelected: boolean) => {
     const baseStyle = 'px-3 mt-2 py-2 rounded cursor-pointer transition-colors duration-150 w-full text-left';
-    if (!isSelected) return `${baseStyle} hover:bg-gray-700  text-gray-300`;
-    
-    switch (type) {
-      case 'short':
-      case 'bybit':
-        return `${baseStyle} bg-[#1B61B3] text-[#F6F6F6]`;
-      case 'long':
-      case 'rsi':
-      case 'binance':
-        return `${baseStyle} bg-[#1B61B3] text-[#F6F6F6]`;
-      case 'ai':
-        return `${baseStyle} bg-[#1B61B3] text-[#F6F6F6]`;
-      default:
-        return `${baseStyle} bg-[#1B61B3] text-[#F6F6F6]`;
-    }
+    if (!isSelected) return `${baseStyle} hover:bg-gray-700 text-gray-300`;
+    return `${baseStyle} bg-[#1B61B3] text-[#F6F6F6]`;
   };
 
   return (
     <div className="flex flex-col w-full bg-gray-900">
+      {/* Main Navbar */}
       <div className="flex items-center justify-between p-4 bg-gray-800/50">
         <div className="flex items-center gap-2">
           <img
@@ -138,12 +132,15 @@ export const Navbar = ({ onRangeChange }: NavbarProps) => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search Crypto Currencies"
               className="w-full bg-gray-800 text-white pl-10 pr-4 py-2 rounded-lg
                 border border-gray-700 focus:border-blue-500 focus:outline-none
                 placeholder-gray-500"
             />
           </div>
+
           <div className="relative">
             <button
               onClick={() => setShowRankDropdown(!showRankDropdown)}
@@ -176,22 +173,33 @@ export const Navbar = ({ onRangeChange }: NavbarProps) => {
               </div>
             )}
           </div>
-          <button className="flex items-center ml-4 text-xs gap-2 text-gray-300 hover:text-white">
+
+          <a 
+            href="https://t.me/coinchart_api" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center ml-4 text-xs gap-2 text-gray-300 hover:text-white"
+          >
             API Access ?
             <FaTelegram size={14} className="text-blue-400" />
-          </button>
+          </a>
         </div>
       </div>
 
+      {/* Strategy & Token Selection Bar */}
       <div className="flex items-center justify-start p-4 bg-black pr-24">
         <div className="flex items-center justify-between gap-24">
+          {/* Strategy Selection */}
           <div className="flex items-center gap-4">
             <span className="text-white">Strategies :</span>
             {selectedStrategies.map(strategy => (
               <div key={strategy.id} className="relative">
                 <button
-                  onClick={() => setActiveStrategyId(strategy.id)}
-                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full ${getButtonStyle1(strategy.id)}`}
+                  onClick={() => {
+                    setActiveStrategyId(strategy.id);
+                    onStrategyChange?.(strategy);
+                  }}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full ${getButtonStyle(strategy.id)}`}
                 >
                   {strategy.name}
                   {strategy.type === 'short' && (
@@ -237,16 +245,17 @@ export const Navbar = ({ onRangeChange }: NavbarProps) => {
             </button>
           </div>
 
+          {/* Token Source Selection */}
           <div className="flex items-center gap-4">
             <span className="text-white">Token :</span>
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M11.7026 11.4475C11.7026 11.4475 7.75261 11.885 5.11761 12.1775C4.88011 12.2063 4.67011 12.365 4.59136 12.6063C4.51261 12.8475 4.59136 13.0988 4.76636 13.2575C6.72386 15.0438 9.66511 17.7188 9.66511 17.7188C9.66261 17.7188 8.85761 21.61 8.32261 24.2063C8.27761 24.4413 8.36261 24.69 8.56761 24.8388C8.77136 24.9875 9.03386 24.99 9.24011 24.8738C11.5451 23.5638 14.9976 21.5938 14.9976 21.5938C14.9976 21.5938 18.4514 23.5638 20.7526 24.875C20.9626 24.99 21.2251 24.9875 21.4289 24.8388C21.6339 24.69 21.7189 24.4413 21.6726 24.2075C21.1376 21.61 20.3339 17.7188 20.3339 17.7188C20.3339 17.7188 23.2751 15.0438 25.2326 13.2613C25.4076 13.0975 25.4851 12.8463 25.4076 12.6063C25.3301 12.3663 25.1201 12.2075 24.8826 12.18C22.2476 11.885 18.2964 11.4475 18.2964 11.4475C18.2964 11.4475 16.6589 7.82501 15.5676 5.41001C15.4651 5.19376 15.2501 5.04251 14.9976 5.04251C14.7451 5.04251 14.5289 5.19501 14.4314 5.41001C13.3389 7.82501 11.7026 11.4475 11.7026 11.4475Z" fill="#71716C"/>
-</svg>
             {selectedTokens.map(token => (
               <button
                 key={token.id}
-                onClick={() => setSelectedTokenType(token.type)}
-                className={`px-4 py-1.5 rounded-full ${getTokenButtonStyle2(token.type)}`}
+                onClick={() => {
+                  setSelectedTokenType(token.type);
+                  onTokenSourceChange?.(token.type);
+                }}
+                className={`px-4 py-1.5 rounded-full ${getTokenButtonStyle(token.type)}`}
               >
                 {token.name}
               </button>
@@ -257,27 +266,10 @@ export const Navbar = ({ onRangeChange }: NavbarProps) => {
             >
               {showTokenSelector ? <X size={20} /> : <Plus size={20} />}
             </button>
-            {showTokenSelector && (
-              <div className="absolute top-36 w-48 bg-gray-800 rounded-lg shadow-lg z-50">
-                <div className="p-2">
-                  {allTokens.map(token => (
-                    <button
-                      key={token.id}
-                      onClick={() => toggleToken(token)}
-                      className={getSelectorItemStyle(
-                        token.type,
-                        selectedTokens.some(t => t.id === token.id)
-                      )}
-                    >
-                      {token.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
+        {/* Strategy Selector Dropdown */}
         {showStrategySelector && (
           <div className="absolute left-72 top-36 w-48 bg-gray-800 rounded-lg shadow-lg z-50">
             <div className="p-2">
@@ -291,6 +283,26 @@ export const Navbar = ({ onRangeChange }: NavbarProps) => {
                   )}
                 >
                   {strategy.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Token Selector Dropdown */}
+        {showTokenSelector && (
+          <div className="absolute right-72 top-36 w-48 bg-gray-800 rounded-lg shadow-lg z-50">
+            <div className="p-2">
+              {allTokens.map(token => (
+                <button
+                  key={token.id}
+                  onClick={() => toggleToken(token)}
+                  className={getSelectorItemStyle(
+                    token.type,
+                    selectedTokens.some(t => t.id === token.id)
+                  )}
+                >
+                  {token.name}
                 </button>
               ))}
             </div>
